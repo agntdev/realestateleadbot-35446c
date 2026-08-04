@@ -1,17 +1,28 @@
 import { Composer } from "grammy";
+import type { Ctx } from "../bot.js";
+import { requireOwner } from "../toolkit/index.js";
+import { getLead } from "../leads.js";
+import { showLeadDetail, showLeadList } from "./admin.js";
 
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "View in Admin", data: "admin:view_lead" }) if the toolkit exposes it.
+const composer = new Composer<Ctx>();
 
-const composer = new Composer();
-
+// Kept as a generic callback for integrations that can only open the desk,
+// while notification buttons include the lead id and open the exact record.
 composer.callbackQuery("admin:view_lead", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.reply("Directs to specific lead details in admin interface");
+  if (!(await requireOwner(ctx))) return;
+  await showLeadList(ctx, undefined, 0, true);
+});
+
+composer.callbackQuery(/^admin:view:([^:]+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!(await requireOwner(ctx))) return;
+  const lead = await getLead(ctx, ctx.match[1]);
+  if (!lead) {
+    await ctx.editMessageText("That lead is no longer available.");
+    return;
+  }
+  await showLeadDetail(ctx, lead);
 });
 
 export default composer;
