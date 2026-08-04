@@ -51,6 +51,24 @@ interface Reminder {
   text: string;
 }
 
+interface StoredLead {
+  id: string;
+  name: string;
+  phone: string;
+  intent: string;
+  note: string;
+  status: "New" | "Done";
+  submitted_at: string;
+  confirmed_by_user: boolean;
+}
+
+type LeadRequest =
+  | { action: "save"; lead: StoredLead }
+  | { action: "get"; id: string }
+  | { action: "list"; status?: "New" | "Done" }
+  | { action: "status"; id: string; status: "New" | "Done" }
+  | { action: "delete"; id: string };
+
 /**
  * createDurableSessionStorage — a grammY StorageAdapter that routes each session
  * key to its own ChatDO instance. Pass to buildBot({ storage }) in the Worker.
@@ -152,6 +170,46 @@ export class ChatDO {
       await this.state.storage.put("reminders", list);
       await this.rearm(list);
       return new Response(null, { status: 204 });
+    }
+
+    // Durable real-estate lead store. The index is explicit: records are read
+    // only through their known IDs, never by scanning a storage keyspace.
+    if (url.pathname === "/leads" && request.method === "POST") {
+      const input = (await request.json()) as LeadRequest;
+      const indexKey = "lead:index";
+      const read = async (id: string) => this.state.storage.get<StoredLead>(`lead:${id}`);
+      if (input.action === "save") {
+        const ids = (await this.state.storage.get<string[]>(indexKey)) ?? [];
+        if (!ids.includes(input.lead.id)) ids.push(input.lead.id);
+        await this.state.storage.put({ [indexKey]: ids, [`lead:${input.lead.id}`]: input.lead });
+        return Response.json({ ok: true, lead: input.lead });
+      }
+      if (input.action === "get") {
+        const lead = await read(input.id);
+        return Response.json({ ok: Boolean(lead), lead });
+      }
+      if (input.action === "list") {
+        const ids = (await this.state.storage.get<string[]>(indexKey)) ?? [];
+        const records = await Promise.all(ids.map(read));
+        const leads = records
+          .filter((lead): lead is StoredLead => lead !== undefined)
+          .filter((lead) => !input.status || lead.status === input.status)
+          .sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
+        return Response.json({ ok: true, leads });
+      }
+      if (input.action === "status") {
+        const lead = await read(input.id);
+        if (!lead) return Response.json({ ok: false }, { status: 404 });
+        const updated = { ...lead, status: input.status };
+        await this.state.storage.put(`lead:${input.id}`, updated);
+        return Response.json({ ok: true, lead: updated });
+      }
+      if (input.action === "delete") {
+        const ids = (await this.state.storage.get<string[]>(indexKey)) ?? [];
+        await this.state.storage.put(indexKey, ids.filter((id) => id !== input.id));
+        await this.state.storage.delete(`lead:${input.id}`);
+        return Response.json({ ok: true });
+      }
     }
 
     return new Response("not found", { status: 404 });

@@ -1,19 +1,41 @@
 [
   {
-    "name": "Submit a lead",
+    "name": "Lead flow validates a phone number and shows the review",
     "steps": [
       {
         "expect": [
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Initiates lead submission flow"
+              "text": "Tell us your name."
             }
           }
         ],
-        "send": {
-          "callback": "lead:start"
-        }
+        "send": { "callback": "lead:start" }
+      },
+      {
+        "send": { "text": "Jamie Lee" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "What phone number can the agent use?" } }]
+      },
+      {
+        "send": { "text": "not-a-phone" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "That phone number doesn’t look right. Use digits with an optional + prefix." } }]
+      },
+      {
+        "send": { "text": "+15551234567" },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "What best describes your plans?" } }]
+      },
+      {
+        "send": { "callback": "lead:intent:Buy" },
+        "expect": [{ "method": "editMessageText", "payload": { "text": "Share any details about the property or your needs." } }]
+      },
+      {
+        "send": { "text": "Looking for a two-bedroom home." },
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Review your enquiry:\nName: Jamie Lee\nPhone: +15551234567\nInterest: Buy\nNote: Looking for a two-bedroom home." } }]
+      },
+      {
+        "send": { "callback": "lead:cancel" },
+        "expect": [{ "method": "editMessageText", "payload": { "text": "Your enquiry wasn’t submitted." } }]
       }
     ]
   }

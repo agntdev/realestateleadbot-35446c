@@ -1,13 +1,13 @@
 [
   {
-    "name": "View in Admin",
+    "name": "View in Admin is restricted",
     "steps": [
       {
         "expect": [
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Directs to specific lead details in admin interface"
+              "text": "Owner access isn't set up yet."
             }
           }
         ],
